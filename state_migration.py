@@ -10,6 +10,7 @@ import voluptuous
 NAME = 'SchemaMigrationTool'
 DEFAULT_TRANSITIONS_DIR = 'migration_data'
 LOGGER = logging.getLogger(NAME)
+MIGRATION_DOCS_URL = 'https://iroha.readthedocs.io/en/1.1.2/maintenance/restarting_node.html#state-database-schema-version'
 
 VERSION_DICT_SCHEMA = {
     'iroha_major': int,
@@ -305,8 +306,8 @@ def migrate_to(connection, to_version: SchemaVersion) -> None:
     if current_version is None:
         LOGGER.error(
             'Cannot perform migration: failed to get current DB schema version. '
-            'Please force set the current version according to the table: '
-            '<be here a link to a table iroha version -> schema version>')
+            'Please force set the schema version to the version of iroha '
+            'that created this schema. Consider reading the documentation first: {}'.format(MIGRATION_DOCS_URL))
         return
 
     chosen_path = decide_migration_path(current_version, to_version)

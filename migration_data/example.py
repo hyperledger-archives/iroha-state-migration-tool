@@ -12,7 +12,7 @@ def migrate3(cursor):
 
 
 TRANSITIONS = (
-    {'from': (1, 0, 0), 'to': (1, 1, 0), 'function': migrate1},
-    {'from': (1, 1, 0), 'to': (1, 1, 1), 'function': migrate2},
-    {'from': (1, 1, 1), 'to': (1, 0, 0), 'function': migrate3},
+    {'from': ('1.0.0'), 'to': ('1.1.0'), 'function': migrate1},
+    {'from': ('1.1.0'), 'to': ('1.1.1'), 'function': migrate2},
+    {'from': ('1.1.1'), 'to': ('1.0.0'), 'function': migrate3},
 )

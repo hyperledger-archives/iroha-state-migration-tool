@@ -58,6 +58,12 @@ def check_convert_nonnegative_int(val: str) -> int:
     return val
 
 
+def check_directory(val: str) -> str:
+    if not os.path.isdir(val):
+        raise ValueError('No such directory.')
+    return val
+
+
 def parse_schema_version(version_string: str) -> SchemaVersion:
     try:
         iroha_major, iroha_minor, iroha_patch = map(int,
@@ -119,17 +125,20 @@ MIGRATION_PARAMS = {
     ),
 }
 
-ALL_PARAMS = (DB_PARAMS, MIGRATION_PARAMS)
+BLOCK_STORAGE_FILES_PARAMS = {
+    'block_storage_files':
+    UserParam(
+        'block_storage_files',
+        'IROHA_BLOCK_STORAGE_PATH',
+        'Path to block storage, if filesystem is used.',
+        check_directory,
+    ),
+}
+
+ALL_PARAMS = (DB_PARAMS, MIGRATION_PARAMS, BLOCK_STORAGE_FILES_PARAMS)
 
 
-def have_params(params, args: argparse.Namespace) -> bool:
-    """Checks if all @a params are provided."""
-    return all(
-        hasattr(args, param_name) and getattr(args, param_name) is not None
-        or param.env_key in os.environ for param_name in params)
-
-
-def get_params(params, args: argparse.Namespace) -> None:
+def get_params(params, args: argparse.Namespace, required: bool) -> None:
     """Substitutes @a params values with user provided data."""
     def get_raw(param_name):
         param = params[param_name]
@@ -139,20 +148,23 @@ def get_params(params, args: argparse.Namespace) -> None:
                 return val
         if param.env_key in os.environ:
             return os.environ[param.env_key]
-        print(
-            'You have not specified {} '
-            'You can set it via command line key {} '
-            'or environment variable {}. '
-            'Alternatively, you can type the value here: '.format(
-                param.descr, param.cmd_line_arg, param.env_key),
-            end='',
-        )
-        return input()
+        if required:
+            print(
+                'You have not specified {} '
+                'You can set it via command line key {} '
+                'or environment variable {}. '
+                'Alternatively, you can type the value here: '.format(
+                    param.descr, param.cmd_line_arg, param.env_key),
+                end='',
+            )
+            return input()
+        return None
 
     def get_transformed(param_name):
         transformer = params[param_name].transformer
         raw_val = get_raw(param_name)
-        return raw_val if transformer is None else transformer(raw_val)
+        return raw_val if transformer is None or raw_val is None else transformer(
+            raw_val)
 
     for param_name in params:
         params[param_name] = get_transformed(param_name)
@@ -345,7 +357,8 @@ def decide_migration_path(
         print('Input not interpreted. Try again.')
 
 
-def migrate_to(connection, to_version: SchemaVersion) -> None:
+def migrate_to(connection, block_storage_files_path: typing.Optional[str],
+               to_version: SchemaVersion) -> None:
     current_version = get_current_db_version(connection)
     if current_version is None:
         LOGGER.error(
@@ -416,7 +429,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     logging.basicConfig(level=args.verbosity)
 
-    get_params(DB_PARAMS, args)
+    get_params(DB_PARAMS, args, True)
     connection = psycopg2.connect(
         "host={pg_ip} port={pg_port} dbname={pg_dbname} user={pg_user} password={pg_password}"
         .format(**DB_PARAMS))
@@ -425,12 +438,15 @@ if __name__ == '__main__':
         print("Current schema version is {}".format(
             get_current_db_version(connection)))
 
-    if have_params(MIGRATION_PARAMS, args):
-        get_params(MIGRATION_PARAMS, args)
+    get_params(MIGRATION_PARAMS, args, False)
+    if MIGRATION_PARAMS['target_schema_version'] is not None:
         target_schema_version = MIGRATION_PARAMS['target_schema_version']
+        get_params(BLOCK_STORAGE_FILES_PARAMS, args, False)
         if args.force_schema_version:
             force_schema_version(connection, target_schema_version)
         else:
             for transitions_dir in args.transitions_dir:
                 load_transitions_from_dir(transitions_dir)
-            migrate_to(connection, target_schema_version)
+            migrate_to(connection,
+                       BLOCK_STORAGE_FILES_PARAMS['block_storage_files'],
+                       target_schema_version)

@@ -368,6 +368,12 @@ def migrate_to(connection, block_storage_files_path: typing.Optional[str],
             .format(MIGRATION_DOCS_URL))
         return
 
+    if current_version == to_version:
+        LOGGER.error(
+            'Cannot perform migration: database is already in target version {}.'
+            .format(current_version))
+        return
+
     chosen_path = decide_migration_path(current_version, to_version)
     if chosen_path is None:
         return

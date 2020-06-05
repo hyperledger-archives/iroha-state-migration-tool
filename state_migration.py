@@ -7,30 +7,13 @@ import psycopg2
 import typing
 import voluptuous
 
+from block_storage import *
+from schema_version import *
+
 NAME = 'SchemaMigrationTool'
 DEFAULT_TRANSITIONS_DIR = 'migration_data'
 LOGGER = logging.getLogger(NAME)
 MIGRATION_DOCS_URL = 'https://iroha.readthedocs.io/en/1.1.2/maintenance/restarting_node.html#state-database-schema-version'
-
-
-class SchemaVersion:
-    def __init__(self, iroha_major, iroha_minor, iroha_patch):
-        self.iroha_major = iroha_major
-        self.iroha_minor = iroha_minor
-        self.iroha_patch = iroha_patch
-
-    def toString(self):
-        return str(self.__dict__)
-
-    def toShortString(self):
-        return '.'.join(
-            map(str, (self.iroha_major, self.iroha_minor, self.iroha_patch)))
-
-    def __eq__(self, rhs):
-        return self.__dict__ == rhs.__dict__
-
-    def __repr__(self):
-        return 'SchemaVersion: {}'.format(self.toShortString())
 
 
 class UserParam:
@@ -62,15 +45,6 @@ def check_directory(val: str) -> str:
     if not os.path.isdir(val):
         raise ValueError('No such directory.')
     return val
-
-
-def parse_schema_version(version_string: str) -> SchemaVersion:
-    try:
-        iroha_major, iroha_minor, iroha_patch = map(int,
-                                                    version_string.split('.'))
-        return SchemaVersion(iroha_major, iroha_minor, iroha_patch)
-    except Exception as e:
-        raise ValueError('Could not parse Schema version.') from e
 
 
 VERSION_SCHEMA = voluptuous.Schema(parse_schema_version)
@@ -357,8 +331,7 @@ def decide_migration_path(
         print('Input not interpreted. Try again.')
 
 
-def migrate_to(connection, block_storage_files_path: typing.Optional[str],
-               to_version: SchemaVersion) -> None:
+def migrate_to(connection, to_version: SchemaVersion) -> None:
     current_version = get_current_db_version(connection)
     if current_version is None:
         LOGGER.error(
@@ -378,12 +351,17 @@ def migrate_to(connection, block_storage_files_path: typing.Optional[str],
     if chosen_path is None:
         return
 
+    get_params(BLOCK_STORAGE_FILES_PARAMS, args, False)
+    block_storage = get_block_storage(
+        BLOCK_STORAGE_FILES_PARAMS['block_storage_files'], connection.cursor(),
+        current_version)
+
     try:
         cursor = connection.cursor()
         for transition in chosen_path:
             LOGGER.info('Migrating from {} to {}.'.format(
                 transition.from_version, transition.to_version))
-            transition.function(cursor)
+            transition.function(cursor, block_storage)
         connection.commit()
     except:
         LOGGER.info('Migration failed, rolling back.')
@@ -447,12 +425,9 @@ if __name__ == '__main__':
     get_params(MIGRATION_PARAMS, args, False)
     if MIGRATION_PARAMS['target_schema_version'] is not None:
         target_schema_version = MIGRATION_PARAMS['target_schema_version']
-        get_params(BLOCK_STORAGE_FILES_PARAMS, args, False)
         if args.force_schema_version:
             force_schema_version(connection, target_schema_version)
         else:
             for transitions_dir in args.transitions_dir:
                 load_transitions_from_dir(transitions_dir)
-            migrate_to(connection,
-                       BLOCK_STORAGE_FILES_PARAMS['block_storage_files'],
-                       target_schema_version)
+            migrate_to(connection, target_schema_version)

@@ -74,7 +74,7 @@ TRANSITION_SCHEMA = voluptuous.Schema({
     'function': callable
 })
 
-PARAMS = {
+DB_PARAMS = {
     'pg_ip':
     UserParam(
         'pg_ip',
@@ -107,6 +107,9 @@ PARAMS = {
         'PostgreSQL WSV database name.',
         check_nonempty_string,
     ),
+}
+
+MIGRATION_PARAMS = {
     'target_schema_version':
     UserParam(
         'target_schema_version',
@@ -116,11 +119,20 @@ PARAMS = {
     ),
 }
 
+ALL_PARAMS = (DB_PARAMS, MIGRATION_PARAMS)
 
-def get_params(args: argparse.Namespace) -> None:
-    """Substitutes PARAMS values with user provided data."""
+
+def have_params(params, args: argparse.Namespace) -> bool:
+    """Checks if all @a params are provided."""
+    return all(
+        hasattr(args, param_name) and getattr(args, param_name) is not None
+        or param.env_key in os.environ for param_name in params)
+
+
+def get_params(params, args: argparse.Namespace) -> None:
+    """Substitutes @a params values with user provided data."""
     def get_raw(param_name):
-        param = PARAMS[param_name]
+        param = params[param_name]
         if hasattr(args, param_name):
             val = getattr(args, param_name)
             if val is not None:
@@ -138,16 +150,16 @@ def get_params(args: argparse.Namespace) -> None:
         return input()
 
     def get_transformed(param_name):
-        transformer = PARAMS[param_name].transformer
+        transformer = params[param_name].transformer
         raw_val = get_raw(param_name)
         return raw_val if transformer is None else transformer(raw_val)
 
-    for param_name in PARAMS:
-        PARAMS[param_name] = get_transformed(param_name)
-        LOGGER.debug('Using {} = {}'.format(param_name, PARAMS[param_name]))
+    for param_name in params:
+        params[param_name] = get_transformed(param_name)
+        LOGGER.debug('Using {} = {}'.format(param_name, params[param_name]))
 
 
-def get_current_db_version(connection):
+def get_current_db_version(connection) -> typing.Optional[SchemaVersion]:
     cur = connection.cursor()
     try:
         cur.execute(
@@ -363,14 +375,15 @@ def migrate_to(connection, to_version: SchemaVersion) -> None:
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-    for _, param in PARAMS.items():
-        parser.add_argument(
-            '--{}'.format(param.cmd_line_arg),
-            help='{} Can also be set with {} environment variable.'.format(
-                param.descr, param.env_key),
-            default=param.default,
-            required=False,
-        )
+    for params in ALL_PARAMS:
+        for _, param in params.items():
+            parser.add_argument(
+                '--{}'.format(param.cmd_line_arg),
+                help='{} Can also be set with {} environment variable.'.format(
+                    param.descr, param.env_key),
+                default=param.default,
+                required=False,
+            )
 
     parser.add_argument(
         '-v',
@@ -393,19 +406,31 @@ if __name__ == '__main__':
         help='Perform no migration, just set the schema version.',
     )
 
+    parser.add_argument(
+        '-p',
+        '--print_current_version',
+        action='store_true',
+        help='Fetch and print current schema version before any other actions.',
+    )
+
     args = parser.parse_args()
     logging.basicConfig(level=args.verbosity)
-    get_params(args)
 
-    target_schema_version = PARAMS['target_schema_version']
-
+    get_params(DB_PARAMS, args)
     connection = psycopg2.connect(
         "host={pg_ip} port={pg_port} dbname={pg_dbname} user={pg_user} password={pg_password}"
-        .format(**PARAMS))
+        .format(**DB_PARAMS))
 
-    if args.force_schema_version:
-        force_schema_version(connection, target_schema_version)
-    else:
-        for transitions_dir in args.transitions_dir:
-            load_transitions_from_dir(transitions_dir)
-        migrate_to(connection, target_schema_version)
+    if hasattr(args, 'print_current_version'):
+        print("Current schema version is {}".format(
+            get_current_db_version(connection)))
+
+    if have_params(MIGRATION_PARAMS, args):
+        get_params(MIGRATION_PARAMS, args)
+        target_schema_version = MIGRATION_PARAMS['target_schema_version']
+        if args.force_schema_version:
+            force_schema_version(connection, target_schema_version)
+        else:
+            for transitions_dir in args.transitions_dir:
+                load_transitions_from_dir(transitions_dir)
+            migrate_to(connection, target_schema_version)

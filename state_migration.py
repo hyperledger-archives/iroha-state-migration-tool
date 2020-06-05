@@ -24,8 +24,7 @@ class SchemaVersion:
 
     def toShortString(self):
         return '.'.join(
-            map(str, (self.iroha_major, self.iroha_minor, self.iroha_patch))
-        )
+            map(str, (self.iroha_major, self.iroha_minor, self.iroha_patch)))
 
     def __eq__(self, rhs):
         return self.__dict__ == rhs.__dict__
@@ -35,7 +34,12 @@ class SchemaVersion:
 
 
 class UserParam:
-    def __init__(self, cmd_line_arg, env_key, descr, transformer=None, default=None):
+    def __init__(self,
+                 cmd_line_arg,
+                 env_key,
+                 descr,
+                 transformer=None,
+                 default=None):
         self.cmd_line_arg = cmd_line_arg
         self.env_key = env_key
         self.descr = descr
@@ -56,48 +60,55 @@ def check_convert_nonnegative_int(val: str) -> int:
 
 def parse_schema_version(version_string: str) -> SchemaVersion:
     try:
-        iroha_major, iroha_minor, iroha_patch = map(int, version_string.split('.'))
+        iroha_major, iroha_minor, iroha_patch = map(int,
+                                                    version_string.split('.'))
         return SchemaVersion(iroha_major, iroha_minor, iroha_patch)
     except Exception as e:
         raise ValueError('Could not parse Schema version.') from e
 
 
 VERSION_SCHEMA = voluptuous.Schema(parse_schema_version)
-TRANSITION_SCHEMA = voluptuous.Schema(
-    {'from': VERSION_SCHEMA, 'to': VERSION_SCHEMA, 'function': callable}
-)
-
+TRANSITION_SCHEMA = voluptuous.Schema({
+    'from': VERSION_SCHEMA,
+    'to': VERSION_SCHEMA,
+    'function': callable
+})
 
 PARAMS = {
-    'pg_ip': UserParam(
+    'pg_ip':
+    UserParam(
         'pg_ip',
         'IROHA_POSTGRES_HOST',
         'PostgreSQL WSV database IP address.',
         check_nonempty_string,
     ),
-    'pg_port': UserParam(
+    'pg_port':
+    UserParam(
         'pg_port',
         'IROHA_POSTGRES_PORT',
         'PostgreSQL WSV database port.',
         check_convert_nonnegative_int,
         5432,
     ),
-    'pg_user': UserParam(
+    'pg_user':
+    UserParam(
         'pg_user',
         'IROHA_POSTGRES_USER',
         'PostgreSQL WSV database username.',
         check_nonempty_string,
     ),
-    'pg_password': UserParam(
-        'pg_password', 'IROHA_POSTGRES_PASSWORD', 'PostgreSQL WSV database password.'
-    ),
-    'pg_dbname': UserParam(
+    'pg_password':
+    UserParam('pg_password', 'IROHA_POSTGRES_PASSWORD',
+              'PostgreSQL WSV database password.'),
+    'pg_dbname':
+    UserParam(
         'pg_dbname',
         'IROHA_POSTGRES_DBNAME',
         'PostgreSQL WSV database name.',
         check_nonempty_string,
     ),
-    'target_schema_version': UserParam(
+    'target_schema_version':
+    UserParam(
         'target_schema_version',
         'IROHA_TARGET_SCHEMA_VERSION',
         'Target database schema version',
@@ -108,7 +119,6 @@ PARAMS = {
 
 def get_params(args: argparse.Namespace) -> None:
     """Substitutes PARAMS values with user provided data."""
-
     def get_raw(param_name):
         param = PARAMS[param_name]
         if hasattr(args, param_name):
@@ -122,8 +132,7 @@ def get_params(args: argparse.Namespace) -> None:
             'You can set it via command line key {} '
             'or environment variable {}. '
             'Alternatively, you can type the value here: '.format(
-                param.descr, param.cmd_line_arg, param.env_key
-            ),
+                param.descr, param.cmd_line_arg, param.env_key),
             end='',
         )
         return input()
@@ -141,31 +150,31 @@ def get_params(args: argparse.Namespace) -> None:
 def get_current_db_version(connection):
     cur = connection.cursor()
     try:
-        cur.execute('select iroha_major, iroha_minor, iroha_patch from schema_version;')
+        cur.execute(
+            'select iroha_major, iroha_minor, iroha_patch from schema_version;'
+        )
         version_data = cur.fetchall()
         LOGGER.debug('Fetched version data from DB: {}'.format(version_data))
         assert len(version_data) == 1
         return SchemaVersion(*version_data[0])
     except Exception as e:
         LOGGER.warning(
-            'Could not read database schema version information: {}'.format(e)
-        )
+            'Could not read database schema version information: {}'.format(e))
         return None
 
 
 def force_schema_version(connection, schema_version: SchemaVersion) -> None:
-    LOGGER.info('Setting schema version to {}'.format(schema_version.toShortString()))
+    LOGGER.info('Setting schema version to {}'.format(
+        schema_version.toShortString()))
     cur = connection.cursor()
-    cur.execute(
-        """
+    cur.execute("""
         create table if not exists schema_version (
             lock char(1) default 'X' not null primary key,
             iroha_major int not null,
             iroha_minor int not null,
             iroha_patch int not null
         );
-        """
-    )
+        """)
     cur.execute(
         """
         insert into schema_version (iroha_major, iroha_minor, iroha_patch)
@@ -196,9 +205,8 @@ class Transition:
         self.function = function
 
     def __repr__(self):
-        return 'Transition: {} -> {}'.format(
-            self.from_version.toShortString(), self.to_version.toShortString()
-        )
+        return 'Transition: {} -> {}'.format(self.from_version.toShortString(),
+                                             self.to_version.toShortString())
 
 
 TRANSITIONS = list()
@@ -212,13 +220,15 @@ def load_transitions_from_dir(path: str) -> None:
     LOGGER.debug('Loading transitions from \'{}\'.'.format(path))
     for file_path in glob.glob(os.path.join(path, '*{}'.format(file_suffix))):
         LOGGER.debug('Loading transitions from \'{}\'.'.format(file_path))
-        module_name = os.path.basename(file_path)[: -len(file_suffix)]
-        module_spec = importlib.util.spec_from_file_location(module_name, file_path)
+        module_name = os.path.basename(file_path)[:-len(file_suffix)]
+        module_spec = importlib.util.spec_from_file_location(
+            module_name, file_path)
         module = importlib.util.module_from_spec(module_spec)
         try:
             module_spec.loader.exec_module(module)
         except Exception as e:
-            LOGGER.warning('Could not load module {}: {}'.format(module_name, str(e)))
+            LOGGER.warning('Could not load module {}: {}'.format(
+                module_name, str(e)))
             continue
         if not hasattr(module, 'TRANSITIONS'):
             LOGGER.debug('Module {} has no TRANSITIONS.'.format(module_name))
@@ -235,46 +245,38 @@ def load_transitions_from_dir(path: str) -> None:
             except voluptuous.MultipleInvalid as e:
                 LOGGER.warning(
                     'Invalid transition data in module {}: {}'.format(
-                        module_name, str(e)
-                    )
-                )
+                        module_name, str(e)))
                 continue
-            if any(
-                new_transition.from_version == my_transition.from_version
-                and new_transition.to_version == my_transition.to_version
-                for my_transition in TRANSITIONS
-            ):
+            if any(new_transition.from_version == my_transition.from_version
+                   and new_transition.to_version == my_transition.to_version
+                   for my_transition in TRANSITIONS):
                 LOGGER.warning(
-                    '{} is provided more than once. Only the first is used.'.format(
-                        new_transition
-                    )
-                )
+                    '{} is provided more than once. Only the first is used.'.
+                    format(new_transition))
             else:
                 TRANSITIONS.append(new_transition)
-                LOGGER.debug(
-                    'Loaded {} from \'{}\'.'.format(new_transition, module_name)
-                )
+                LOGGER.debug('Loaded {} from \'{}\'.'.format(
+                    new_transition, module_name))
                 loaded_count += 1
-        LOGGER.info(
-            'Loaded {} transitions from \'{}\'.'.format(loaded_count, module_name)
-        )
+        LOGGER.info('Loaded {} transitions from \'{}\'.'.format(
+            loaded_count, module_name))
 
 
 def decide_migration_path(
-    from_version: SchemaVersion, to_version: SchemaVersion
-) -> typing.Optional[typing.List[Transition]]:
+        from_version: SchemaVersion,
+        to_version: SchemaVersion) -> typing.Optional[typing.List[Transition]]:
     def find_all_transitions_paths(
-        from_version: SchemaVersion, to_version: SchemaVersion
-    ) -> typing.List[typing.List[Transition]]:
+            from_version: SchemaVersion,
+            to_version: SchemaVersion) -> typing.List[typing.List[Transition]]:
         """Returns a list of all known transition paths from @a from_version to @a to_version."""
-
         def depth_search(current_path) -> typing.List[typing.List[Transition]]:
             matching_paths = list()
             makes_no_cycle = (
-                lambda transition: transition.from_version not in current_path
-            )
-            connects = lambda transition: transition.to_version == current_path[-1]
-            for transition in filter(makes_no_cycle, filter(connects, TRANSITIONS)):
+                lambda transition: transition.from_version not in current_path)
+            connects = lambda transition: transition.to_version == current_path[
+                -1]
+            for transition in filter(makes_no_cycle,
+                                     filter(connects, TRANSITIONS)):
                 if transition.from_version == from_version:
                     # found a path
                     matching_paths.append([transition])
@@ -297,25 +299,18 @@ def decide_migration_path(
             'Cannot perform migration: failed to find a transition path from {} to {}. '
             'Please check the schema versions and if they are correct, consider '
             'contributing the missing transition.'.format(
-                from_version.toShortString(), to_version.toShortString()
-            )
-        )
+                from_version.toShortString(), to_version.toShortString()))
         return None
 
     def format_path(path):
-        return ' -> '.join(
-            (
-                from_version.toShortString(),
-                *(transition.to_version.toShortString() for transition in path),
-            )
-        )
+        return ' -> '.join((
+            from_version.toShortString(),
+            *(transition.to_version.toShortString() for transition in path),
+        ))
 
-    print(
-        'Found the following applicable transition paths '
-        'compatible with iroha, compiled for DB version {}:'.format(
-            to_version.toShortString()
-        )
-    )
+    print('Found the following applicable transition paths '
+          'compatible with iroha, compiled for DB version {}:'.format(
+              to_version.toShortString()))
     while True:
         for idx, path in enumerate(transition_paths):
             print('{}:  {}'.format(idx, format_path(path)))
@@ -332,9 +327,8 @@ def decide_migration_path(
             choice = int(answer)
             if choice < len(transition_paths):
                 chosen_path = transition_paths[choice]
-                LOGGER.debug(
-                    'User chose migration path {}.'.format(format_path(chosen_path))
-                )
+                LOGGER.debug('User chose migration path {}.'.format(
+                    format_path(chosen_path)))
                 return chosen_path
         print('Input not interpreted. Try again.')
 
@@ -345,10 +339,8 @@ def migrate_to(connection, to_version: SchemaVersion) -> None:
         LOGGER.error(
             'Cannot perform migration: failed to get current DB schema version. '
             'Please force set the schema version to the version of iroha '
-            'that created this schema. Consider reading the documentation first: {}'.format(
-                MIGRATION_DOCS_URL
-            )
-        )
+            'that created this schema. Consider reading the documentation first: {}'
+            .format(MIGRATION_DOCS_URL))
         return
 
     chosen_path = decide_migration_path(current_version, to_version)
@@ -358,11 +350,8 @@ def migrate_to(connection, to_version: SchemaVersion) -> None:
     try:
         cursor = connection.cursor()
         for transition in chosen_path:
-            LOGGER.info(
-                'Migrating from {} to {}.'.format(
-                    transition.from_version, transition.to_version
-                )
-            )
+            LOGGER.info('Migrating from {} to {}.'.format(
+                transition.from_version, transition.to_version))
             transition.function(cursor)
         connection.commit()
     except:
@@ -378,8 +367,7 @@ if __name__ == '__main__':
         parser.add_argument(
             '--{}'.format(param.cmd_line_arg),
             help='{} Can also be set with {} environment variable.'.format(
-                param.descr, param.env_key
-            ),
+                param.descr, param.env_key),
             default=param.default,
             required=False,
         )
@@ -412,10 +400,8 @@ if __name__ == '__main__':
     target_schema_version = PARAMS['target_schema_version']
 
     connection = psycopg2.connect(
-        "host={pg_ip} port={pg_port} dbname={pg_dbname} user={pg_user} password={pg_password}".format(
-            **PARAMS
-        )
-    )
+        "host={pg_ip} port={pg_port} dbname={pg_dbname} user={pg_user} password={pg_password}"
+        .format(**PARAMS))
 
     if args.force_schema_version:
         force_schema_version(connection, target_schema_version)

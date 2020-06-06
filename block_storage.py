@@ -18,7 +18,7 @@ class BlockStorageFiles:
     def iterate(self):
         height = 1
         while True:
-            block = load_at_height(height)
+            block = self.load_at_height(height)
             if block is None:
                 break
             yield block
@@ -32,7 +32,7 @@ class BlockStorageFiles:
         if not os.path.isfile(block_file_path):
             return None
         with open(block_file_path, 'rt') as block_file:
-            return json_format.Parse(block_file.read(), self._schema.Block())
+            return google.protobuf.json_format.Parse(block_file.read(), self._schema.Block())
 
 
 class BlockStorageSql:

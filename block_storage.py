@@ -4,13 +4,26 @@ import typing
 import importlib.util
 import google.protobuf.json_format
 import binascii
+import hashlib
 
 from schema_version import *
 
 SCHEMA_DIR = 'schema'
 
 
-class BlockStorageFiles:
+class BlockStorageBase:
+    @staticmethod
+    def get_block_hash(block) -> bytes:
+        '''@return hex hash of the block.
+        pray that it matches the one calculated in iroha!
+        (there are no guarantees of identical serialization of protobuf)
+        '''
+        hasher = hashlib.sha3_256()
+        hasher.update(block.block_v1.payload.SerializeToString())
+        return binascii.hexlify(hasher.digest())
+
+
+class BlockStorageFiles(BlockStorageBase):
     def __init__(self, path, schema):
         self._path = path
         self._schema = schema
@@ -63,7 +76,7 @@ class BlockStorageFiles:
         return scope[0]
 
 
-class BlockStorageSql:
+class BlockStorageSql(BlockStorageBase):
     def __init__(self, cursor, schema):
         self._cursor = cursor
         self._schema = schema

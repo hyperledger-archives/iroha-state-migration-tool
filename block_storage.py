@@ -32,7 +32,35 @@ class BlockStorageFiles:
         if not os.path.isfile(block_file_path):
             return None
         with open(block_file_path, 'rt') as block_file:
-            return google.protobuf.json_format.Parse(block_file.read(), self._schema.Block())
+            return google.protobuf.json_format.Parse(block_file.read(),
+                                                     self._schema.Block())
+
+    def get_top_block_height(self) -> typing.Optional[int]:
+
+        # listing a directory with very many files is longer than querying single file names
+        block_exists = lambda height: os.path.isfile(
+            self._get_block_file_path_at_height(height))
+
+        if not block_exists(1): return None
+
+        scope = [1, 1]
+
+        # incremental search
+        while block_exists(scope[1]):
+            scope = [scope[1], scope[1] * 2]
+
+        # binary search
+        while scope[0] + 1 < scope[1]:
+            p = scope[0] + (scope[1] - scope[0]) // 2
+            if block_exists(p):
+                scope[0] = p
+            else:
+                scope[1] = p
+
+        assert block_exists(scope[0])
+        assert not block_exists(scope[1])
+
+        return scope[0]
 
 
 class BlockStorageSql:
@@ -57,6 +85,13 @@ class BlockStorageSql:
     def load_at_height(self, height: int):
         self._cursor.execute('select block_data from blocks where height = %s',
                              height)
+        rows = self._cursor.fetchall()
+        if len(row) == 0:
+            return None
+        return self._block_from_hex(rows[0][0])
+
+    def get_top_block_height(self) -> typing.Optional[int]:
+        self._cursor.execute('select max(height) from blocks')
         rows = self._cursor.fetchall()
         if len(row) == 0:
             return None

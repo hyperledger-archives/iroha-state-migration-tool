@@ -156,6 +156,7 @@ def get_current_db_version(connection) -> typing.Optional[SchemaVersion]:
         assert len(version_data) == 1
         return SchemaVersion(*version_data[0])
     except Exception as e:
+        connection.rollback()
         LOGGER.warning(
             'Could not read database schema version information: {}'.format(e))
         return None

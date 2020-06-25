@@ -54,6 +54,28 @@ If you use database block storage, do not specify `--block_storage_files`.
                         variable.
 ```
 
+## exceptional cases:
+The following versions of Iroha are exceptional: 1.1.1, 1.1.2, 1.1.3.
+
+When migrating __from__ one of these versins, one should first force the right schema version (the one used before migration) with `--force_schema_version` and then perform the common migration command.
+
+When migrating __to__ one of these versins, one should first perform the common migration command to the real version that is going to be used and then force version 1.1.1 with `--force_schema_version`.
+
+## examples
+
+### migration from 1.3.4 to 1.4.8:
+This is a common case for any versions except the special ones (see above).
+```
+python3 state_migration.py --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.4.8 --block_storage_files /tmp/we_still_use_file_block_store/
+```
+
+### migration from 1.1.1 to 1.2.0
+Here is an exceptional case to deal with buggy versions of Iroha, when it uses wrong schema version numbers, or does not support migration:
+```
+python3 state_migration.py --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.1.1 --force_schema_version
+python3 state_migration.py --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.4.8 --block_storage_files /tmp/we_still_use_file_block_store/
+```
+
 
 ## Adding migration scripts
 To add a new migration script, just create a file for your case like this:

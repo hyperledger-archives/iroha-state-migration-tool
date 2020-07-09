@@ -76,6 +76,25 @@ python3 state_migration.py --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_
 python3 state_migration.py --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.4.8 --block_storage_files /tmp/we_still_use_file_block_store/
 ```
 
+## Docker 
+### Build docker image 
+```shell script
+$ dcoker build -t soramitsu/iroha-state-migration-tool:1.2.0 .
+```
+
+### Example using docker image
+Print help:
+```shell script
+docker run -it --rm soramitsu/iroha-state-migration-tool:1.2.0 --help
+```
+
+Migration from 1.1.1 to 1.2.0:
+```
+docker run -it --rm \
+   soramitsu/iroha-state-migration-tool:1.2.0  --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.1.1 --force_schema_version
+docker run -it --rm -v /tmp/we_still_use_file_block_store:/tmp/we_still_use_file_block_store \
+   soramitsu/iroha-state-migration-tool:1.2.0  --pg_ip 127.0.0.1 --pg_port 5432 --pg_user boss --pg_password big_russian --pg_dbname iroha_data --target_schema_version 1.2.0 --block_storage_files /tmp/we_still_use_file_block_store/
+```
 
 ## Adding migration scripts
 To add a new migration script, just create a file for your case like this:

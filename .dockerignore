@@ -1,7 +1,10 @@
-.idea
-.dockerignore
-.gitignore
-.git
-Dockerfile
-README.md
-housekeeping
+.# ignore everything
+*
+.*
+# except following:
+!block_storage.py
+!migration_data
+!requirements.txt
+!schema
+!schema_version.py
+!state_migration.py

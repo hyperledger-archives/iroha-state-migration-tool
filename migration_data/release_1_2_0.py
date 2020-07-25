@@ -35,10 +35,13 @@ def migrate_1_1_3_to_1_2_0(cursor, block_storage):
     cursor.execute(
         'create table blockstorage_data (h bigint, i bigint, t bigint)')
 
-    def get_block_data(block, output_queue):
+    multiprocessing_manager = multiprocessing.Manager()
+    block_data_to_submit = multiprocessing_manager.Queue()
+
+    def get_block_data(block):
         height = block.block_v1.payload.height
         for index, tx in enumerate(block.block_v1.payload.transactions):
-            output_queue.put(
+            block_data_to_submit.put(
                 (height, index, tx.payload.reduced_payload.created_time))
 
     def submit_block_data(block_data_to_submit):
@@ -51,19 +54,13 @@ def migrate_1_1_3_to_1_2_0(cursor, block_storage):
                 'insert into blockstorage_data (h, i, t) values {}'.format(
                     ', '.join(map(str, chunk))))
 
-    multiprocessing_manager = multiprocessing.Manager()
-    block_data_to_submit = multiprocessing_manager.Queue()
-
     block_data_submitter = multiprocessing.Process(
         target=submit_block_data, args=(block_data_to_submit, ))
     block_data_submitter.start()
 
-    # I could not parallelize block loading, but it would be nice
-    for block in block_storage.iterate():
-        get_block_data(block, block_data_to_submit)
+    block_storage.iterate_with_callable(get_block_data)
 
     block_data_to_submit.put('stop')
-
     block_data_submitter.join()
 
     # now merge the tables and block storage data

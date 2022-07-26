@@ -5,6 +5,7 @@ import importlib.util
 import google.protobuf.json_format
 import binascii
 import hashlib
+import multiprocessing
 
 from schema_version import *
 
@@ -36,6 +37,37 @@ class BlockStorageFiles(BlockStorageBase):
                 break
             yield block
             height += 1
+
+    def iterate_with_callable(self, func):
+        'WARNING func must be thread safe!'
+        current_height = multiprocessing.Value('i')
+        current_height.value = 0
+
+        def load_and_feed_next_block():
+            def load_block(height=current_height):
+                with height.get_lock():
+                    height_local = height.value
+                    height.value += 1
+                    return self.load_at_height(height_local)
+
+            for block in iter(load_block, None):
+                func(block)
+
+        pool = list()
+
+        for _ in range(multiprocessing.cpu_count()):
+            process = multiprocessing.Process(target=load_and_feed_next_block)
+            process.start()
+            pool.append(process)
+
+        for process in pool:
+            process.join()
+
+        for process in pool:
+            if process.exitcode != 0:
+                raise Exception(
+                    f'BlockStorageFiles: child process {process.name} exited with code {process.exitcode}'
+                )
 
     def _get_block_file_path_at_height(self, height: int) -> str:
         return os.path.join(self._path, '{0:0>16}'.format(height))
